@@ -1,168 +1,135 @@
 -- =====================================================================
---  CONSULTAS.SQL  -  Catalogo de TODAS las consultas que usa la pagina.
+--  CONSULTAS.SQL  -  Catalogo de las consultas que usa la pagina web.
+--  (Esquema de la miss: PRODUCTO, PEDIDO, DETALLE_PEDIDO, datos_extra, etc.)
 --
---  Aqui esta, una por una, cada consulta SQL y EN QUE PARTE de la web /
---  de la API se ejecuta. Es la "chuleta" para la demo en vivo: cuando
---  la profesora pregunte "que query corre aqui?", esta es la respuesta.
---
---  OJO: en la pagina web, cada vez que haces clic, la "Consola SQL"
---  (panel oscuro de abajo) muestra exactamente esta misma consulta.
+--  En la pagina, cada accion muestra abajo (Consola SQL) la consulta exacta
+--  que se ejecuto. Esta es la "chuleta" por si la miss pregunta.
 -- =====================================================================
 
 
--- #####################################################################
--- # BLOQUE 1  -  CRUD de PRODUCTOS  (constraints CHECK/UNIQUE/NOT NULL)
--- # Pantalla:  "1. CRUD + Constraints"
--- # Rubrica:   Integridad y Constraints (2.0)
--- #####################################################################
+-- #########################################################
+-- # 1) CRUD de PRODUCTO  (Integridad: CHECK / UNIQUE / NOT NULL)
+-- #    Pantalla "Carta (CRUD)"
+-- #########################################################
 
--- [GET /api/productos]  -> al abrir la pantalla, llena la tabla.
--- (JOIN productos + categorias para mostrar el nombre de la categoria)
-SELECT p.id, p.nombre, p.precio, p.stock, p.disponible,
-       c.nombre AS categoria, p.categoria_id, p.atributos
-FROM productos p
-LEFT JOIN categorias c ON c.id = p.categoria_id
-ORDER BY p.id;
+-- [GET /api/productos]
+SELECT p.id_producto AS id, p.nombre, p.descripcion, p.precio, p.stock,
+       c.nombre AS categoria, p.id_categoria AS categoria_id, p.datos_extra AS atributos
+FROM producto p
+LEFT JOIN categoria c ON c.id_categoria = p.id_categoria
+ORDER BY p.id_producto;
 
--- [POST /api/productos]  -> boton "Crear producto".
--- Aqui se DISPARAN las restricciones: CHECK (precio>0, stock>=0),
--- UNIQUE (nombre), NOT NULL (nombre). Probar a propósito un precio
--- negativo o un nombre repetido para ver el error controlado.
-INSERT INTO productos (nombre, precio, stock, categoria_id, atributos)
-VALUES ($1, $2, $3, $4, $5::jsonb)
+-- [POST /api/productos]  -> aqui se disparan UNIQUE(nombre), CHECK(precio>0),
+--                           CHECK(stock>=0) y NOT NULL(nombre)
+INSERT INTO producto (nombre, descripcion, precio, stock, id_categoria, datos_extra)
+VALUES ($1, $2, $3, $4, $5, $6::jsonb)
 RETURNING *;
 
--- [PUT /api/productos/:id]  -> boton "Editar" de una fila.
-UPDATE productos
-SET nombre = $1, precio = $2, stock = $3, categoria_id = $4, disponible = $5
-WHERE id = $6
+-- [PUT /api/productos/:id]
+UPDATE producto
+SET nombre = $1, descripcion = $2, precio = $3, stock = $4, id_categoria = $5, datos_extra = $6::jsonb
+WHERE id_producto = $7
 RETURNING *;
 
--- [DELETE /api/productos/:id]  -> boton "Eliminar" de una fila.
-DELETE FROM productos WHERE id = $1 RETURNING id, nombre;
+-- [DELETE /api/productos/:id]
+DELETE FROM producto WHERE id_producto = $1 RETURNING id_producto, nombre;
 
 
--- #####################################################################
--- # BLOQUE 2  -  PEDIDO = CRUD COMPLEJO (3 tablas) + TRANSACCION ACID
--- # Pantalla:  "2. Pedido (Transaccion)"
--- # Rubrica:   Operaciones CRUD Complejas (4.0) + Gestion de Transacciones (1.0)
--- #
--- # Un solo pedido toca 3 tablas: pedidos, detalle_pedido y productos
--- # (descuenta stock). Todo va dentro de BEGIN ... COMMIT, y si un
--- # producto no tiene stock suficiente se hace ROLLBACK (no se guarda nada).
--- #####################################################################
-
--- [POST /api/pedidos]  -> boton "Confirmar pedido".
+-- #########################################################
+-- # 2) PEDIDO = CRUD complejo (3 tablas) + TRANSACCION ACID
+-- #    Pantalla "Registrar venta"  -> [POST /api/pedidos]
+-- #########################################################
 BEGIN;
 
-  -- (a) cabecera del pedido
-  INSERT INTO pedidos (cliente_id, mesa_id, empleado_id, estado, total)
-  VALUES ($1, $2, $3, 'pendiente', 0)
-  RETURNING id;
+  -- cabecera
+  INSERT INTO PEDIDO (id_cliente, id_empleado, id_mesa, estado, total)
+  VALUES ($1, $2, $3, 'Pendiente', 0)
+  RETURNING id_pedido;
 
-  -- (b) por cada producto del carrito: se bloquea la fila (FOR UPDATE),
-  --     se valida stock, se inserta el detalle y se descuenta stock.
-  SELECT nombre, precio, stock FROM productos WHERE id = $1 FOR UPDATE;
+  -- por cada producto: se bloquea la fila, se valida stock, se inserta detalle y se descuenta stock
+  SELECT nombre, precio, stock FROM PRODUCTO WHERE id_producto = $1 FOR UPDATE;
+  INSERT INTO DETALLE_PEDIDO (id_pedido, id_producto, cantidad, precio_unitario, subtotal)
+  VALUES ($1, $2, $3, $4, $5);
+  UPDATE PRODUCTO SET stock = stock - $1 WHERE id_producto = $2;
 
-  INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario)
-  VALUES ($1, $2, $3, $4);
-
-  UPDATE productos SET stock = stock - $1 WHERE id = $2;
-
-  -- (c) recalcular el total del pedido sumando el detalle
-  UPDATE pedidos
-  SET total = (SELECT COALESCE(SUM(subtotal),0)
-               FROM detalle_pedido WHERE pedido_id = $1)
-  WHERE id = $1;
+  -- recalcular total
+  UPDATE PEDIDO
+  SET total = (SELECT COALESCE(SUM(subtotal),0) FROM DETALLE_PEDIDO WHERE id_pedido = $1)
+  WHERE id_pedido = $1;
 
 COMMIT;
--- Si algo falla (ej. stock insuficiente):  ROLLBACK;  -- se revierte TODO
+-- Si un producto no tiene stock suficiente:  ROLLBACK;  (no se guarda nada)
 
--- [GET /api/pedidos]  -> lista de pedidos (JOIN de 4 tablas).
-SELECT p.id, p.fecha, p.estado, p.total,
-       cl.nombre AS cliente, m.numero AS mesa, e.nombre AS mesero
-FROM pedidos p
-LEFT JOIN clientes  cl ON cl.id = p.cliente_id
-LEFT JOIN mesas     m  ON m.id  = p.mesa_id
-LEFT JOIN empleados e  ON e.id  = p.empleado_id
-ORDER BY p.id DESC;
-
-
--- #####################################################################
--- # BLOQUE 3  -  REPORTE  GROUP BY / HAVING + JOIN de 4 tablas + EXPORT
--- # Pantalla:  "3. Reportes"
--- # Rubrica:   Reportes y Exportacion (2.0)
--- #
--- # Botones: "Ver JSON", "Descargar CSV", "Descargar Excel".
--- # El parametro $1 es el "minimo de ingresos" del filtro HAVING.
--- #####################################################################
-
--- [GET /api/reportes/ventas-por-categoria?min=...&formato=json|csv|excel]
-SELECT c.nombre                AS categoria,
-       COUNT(DISTINCT p.id)    AS num_pedidos,
-       SUM(d.cantidad)         AS unidades_vendidas,
-       SUM(d.subtotal)         AS ingresos
-FROM pedidos p
-JOIN detalle_pedido d ON d.pedido_id = p.id
-JOIN productos     pr ON pr.id = d.producto_id
-JOIN categorias    c  ON c.id = pr.categoria_id
-WHERE p.estado IN ('pagado','servido')
-GROUP BY c.nombre
-HAVING SUM(d.subtotal) > $1
-ORDER BY ingresos DESC;
+-- [GET /api/pedidos]  (JOIN de 4 tablas)
+SELECT p.id_pedido AS id, p.fecha_hora, p.estado, p.total,
+       cl.nombre || ' ' || cl.apellido AS cliente,
+       m.numero AS mesa,
+       e.nombre || ' ' || e.apellido AS mesero
+FROM PEDIDO p
+LEFT JOIN CLIENTE  cl ON cl.id_cliente  = p.id_cliente
+LEFT JOIN MESA     m  ON m.id_mesa       = p.id_mesa
+LEFT JOIN EMPLEADO e  ON e.id_empleado   = p.id_empleado
+ORDER BY p.id_pedido DESC;
 
 
--- #####################################################################
--- # BLOQUE 4  -  MODULO HIBRIDO NoSQL  (JSONB en productos.atributos)
--- # Pantalla:  "4. NoSQL / JSONB"
--- # Rubrica:   Caso de Uso NoSQL / Hibrido (2.5)
--- #
--- # La columna productos.atributos es JSONB: guarda datos que cambian
--- # de un producto a otro (vegano, picante, calorias, alergenos[],
--- # ingredientes[]) sin tener que crear una columna o tabla por cada uno.
--- # Tabla afectada: SOLO productos (columna atributos).
--- #####################################################################
+-- #########################################################
+-- # 3) REPORTES  (GROUP BY / HAVING + JOIN + exportacion)
+-- #    Pantalla "Reportes"
+-- #########################################################
 
--- [GET /api/nosql/buscar?clave=vegano&valor=true]  -> "contiene" (@>)
-SELECT id, nombre, precio, atributos
-FROM productos
-WHERE atributos @> $1::jsonb;     -- ej:  {"vegano": true}
+-- [GET /api/reportes/ventas-por-sucursal?min=...&formato=json|csv|excel]
+SELECT s.nombre AS sucursal,
+       COUNT(DISTINCT p.id_pedido) AS total_pedidos,
+       COALESCE(SUM(p.total), 0)   AS total_ventas
+FROM SUCURSAL s
+LEFT JOIN MESA   m ON s.id_scrsal = m.id_scrsal
+LEFT JOIN PEDIDO p ON m.id_mesa   = p.id_mesa
+GROUP BY s.id_scrsal, s.nombre
+HAVING COALESCE(SUM(p.total), 0) > $1
+ORDER BY total_ventas DESC;
 
--- [GET /api/nosql/alergeno?alergeno=mani]  -> busca dentro del arreglo JSON
-SELECT id, nombre
-FROM productos
-WHERE atributos -> 'alergenos' @> $1::jsonb;   -- ej:  ["mani"]
+-- [GET /api/reportes/productos-mas-vendidos]
+SELECT pr.nombre AS producto, SUM(dp.cantidad) AS unidades_vendidas
+FROM PRODUCTO pr
+JOIN DETALLE_PEDIDO dp ON pr.id_producto = dp.id_producto
+GROUP BY pr.id_producto, pr.nombre
+HAVING SUM(dp.cantidad) > 0
+ORDER BY unidades_vendidas DESC;
 
 
--- #####################################################################
--- # BLOQUE 5  -  OPTIMIZACION / INDICES  (EXPLAIN antes y despues)
--- # Pantalla:  "5. Optimizacion"
--- # Rubrica:   Optimizacion (Indices) (3.0)
--- #####################################################################
+-- #########################################################
+-- # 4) NoSQL / JSONB  (PRODUCTO.datos_extra, operador ?)
+-- #    Pantalla "Modulo NoSQL"
+-- #########################################################
 
--- [GET /api/optimizacion/indices]  -> lista todos los indices creados.
+-- [GET /api/nosql/etiqueta?valor=sin gluten]
+SELECT id_producto AS id, nombre, precio, datos_extra AS atributos
+FROM PRODUCTO
+WHERE datos_extra -> 'etiquetas' ? $1;
+
+-- [GET /api/nosql/alergeno?valor=pescado]
+SELECT id_producto AS id, nombre, precio, datos_extra AS atributos
+FROM PRODUCTO
+WHERE datos_extra -> 'alergenos' ? $1;
+
+
+-- #########################################################
+-- # 5) OPTIMIZACION / INDICES
+-- #    Pantalla "Optimizacion"
+-- #########################################################
+
+-- [GET /api/optimizacion/indices]
 SELECT indexname, tablename, indexdef
 FROM pg_indexes
 WHERE schemaname = 'public'
 ORDER BY tablename, indexname;
 
--- [GET /api/optimizacion/explain]  -> plan de ejecucion del reporte.
--- Para la evidencia "antes y despues": correr este EXPLAIN, luego borrar
--- el indice GIN (ver db/03_indices.sql), volver a correrlo, y comparar.
+-- [GET /api/optimizacion/explain]  -> plan del reporte de ventas por sucursal
 EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-SELECT c.nombre, COUNT(DISTINCT p.id), SUM(d.cantidad), SUM(d.subtotal)
-FROM pedidos p
-JOIN detalle_pedido d ON d.pedido_id = p.id
-JOIN productos     pr ON pr.id = d.producto_id
-JOIN categorias    c  ON c.id = pr.categoria_id
-WHERE p.estado IN ('pagado','servido')
-GROUP BY c.nombre
-HAVING SUM(d.subtotal) > 0
-ORDER BY 4 DESC;
-
--- Demostracion "antes y despues" del indice GIN sobre el JSONB:
---   1) EXPLAIN ANALYZE SELECT * FROM productos WHERE atributos @> '{"vegano":true}';
---   2) DROP INDEX idx_productos_atributos;   -- quitar el indice
---   3) repetir el EXPLAIN  (ahora hace Seq Scan, mas lento)
---   4) CREATE INDEX idx_productos_atributos ON productos USING GIN (atributos);
---   5) repetir el EXPLAIN  (vuelve a usar el indice / Bitmap Index Scan)
+SELECT s.nombre, COUNT(DISTINCT p.id_pedido), COALESCE(SUM(p.total),0)
+FROM SUCURSAL s
+LEFT JOIN MESA m ON s.id_scrsal = m.id_scrsal
+LEFT JOIN PEDIDO p ON m.id_mesa = p.id_mesa
+GROUP BY s.id_scrsal, s.nombre
+HAVING COALESCE(SUM(p.total),0) > 0
+ORDER BY 3 DESC;

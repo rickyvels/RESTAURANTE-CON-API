@@ -43,10 +43,10 @@
     <section class="page active" id="page-crud">
       <div class="eyebrow">Entregable 1 · Integridad y constraints</div>
       <h2>Carta del restaurante</h2>
-      <p class="lead">Crea, edita y elimina platos. Las reglas de la base (<b>CHECK</b>, <b>UNIQUE</b>, <b>NOT NULL</b>) se validan en vivo: si rompes una, la base la rechaza y verás el motivo.</p>
+      <p class="lead">Crea, edita y elimina platos de la tabla <b>PRODUCTO</b>. Las reglas de la base (<b>CHECK</b>, <b>UNIQUE</b>, <b>NOT NULL</b>) se validan en vivo: si rompes una, la base la rechaza y verás el motivo.</p>
 
       <div class="callout">
-        Para la demo: intenta crear un plato con <b>precio negativo</b> (rompe CHECK) o con un nombre que ya existe, ej. “Lomo Saltado” (rompe UNIQUE).
+        Para la demo: intenta crear un plato con <b>precio negativo</b> (rompe CHECK), o con un nombre que ya existe, ej. “Lomo Saltado” (rompe UNIQUE), o sin nombre (rompe NOT NULL).
       </div>
 
       <div class="card">
@@ -57,9 +57,16 @@
           <div class="field"><label>Precio (S/)</label><input id="p-precio" type="number" step="0.01" placeholder="25.00"></div>
           <div class="field"><label>Stock</label><input id="p-stock" type="number" value="20"></div>
           <div class="field"><label>Categoría</label><select id="p-categoria"></select></div>
-          <div class="field"><label>¿Vegano? (JSONB)</label>
-            <select id="p-vegano"><option value="false">No</option><option value="true">Sí</option></select></div>
-          <div class="field"><label>Picante 0–3 (JSONB)</label><input id="p-picante" type="number" min="0" max="3" value="0"></div>
+          <div class="field"><label>Descripción</label><input id="p-desc" placeholder="Breve descripción"></div>
+        </div>
+        <div class="callout" style="margin:14px 0 10px">Datos semi-estructurados <b>JSONB</b> (columna <span class="mono">datos_extra</span>):</div>
+        <div class="grid c3">
+          <div class="field"><label>Nivel de picante</label>
+            <select id="p-picante"><option value="">(ninguno)</option><option value="bajo">bajo</option><option value="medio">medio</option><option value="alto">alto</option></select></div>
+          <div class="field"><label>¿Apto vegetariano?</label>
+            <select id="p-vegetariano"><option value="">(no indicar)</option><option value="true">Sí</option><option value="false">No</option></select></div>
+          <div class="field"><label>Etiquetas (separadas por coma)</label><input id="p-etiquetas" placeholder="criollo, plato principal"></div>
+          <div class="field"><label>Alérgenos (separados por coma)</label><input id="p-alergenos" placeholder="gluten, pescado"></div>
         </div>
         <div class="btn-row">
           <button class="btn primary" id="btn-guardar">Guardar plato</button>
@@ -71,7 +78,7 @@
         <h3>Platos en carta <span class="pill" id="crud-count">SELECT</span></h3>
         <div class="table-wrap">
           <table id="tabla-productos">
-            <thead><tr><th>#</th><th>Plato</th><th>Categoría</th><th class="right">Precio</th><th class="right">Stock</th><th>Atributos (JSONB)</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Plato</th><th>Categoría</th><th class="right">Precio</th><th class="right">Stock</th><th>datos_extra (JSONB)</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -82,10 +89,10 @@
     <section class="page" id="page-venta">
       <div class="eyebrow">Entregable 1 y 2 · CRUD complejo + Transacción ACID</div>
       <h2>Registrar una venta</h2>
-      <p class="lead">Crear un pedido toca <b>3 tablas</b> (pedidos, detalle_pedido, productos) dentro de una transacción <b>BEGIN … COMMIT</b>. Si un producto no tiene stock, se hace <b>ROLLBACK</b> y no se guarda nada.</p>
+      <p class="lead">Crear un pedido toca <b>3 tablas</b> (PEDIDO, DETALLE_PEDIDO, PRODUCTO) dentro de una transacción <b>BEGIN … COMMIT</b>. Si un producto no tiene stock, se hace <b>ROLLBACK</b> y no se guarda nada.</p>
 
       <div class="callout">
-        Para la demo: agrega un producto con cantidad enorme (ej. 99999) para forzar el <b>ROLLBACK</b> por stock insuficiente, y observa la consola SQL.
+        Para la demo: agrega un producto con cantidad enorme (ej. 99999) para forzar el <b>ROLLBACK</b> por stock insuficiente, y observa la consola SQL. <br>Nota: cliente, mesa y mesero son <b>obligatorios</b> (la tabla PEDIDO los exige).
       </div>
 
       <div class="card">
@@ -128,13 +135,13 @@
     <!-- ---------- 3. REPORTE ---------- -->
     <section class="page" id="page-reporte">
       <div class="eyebrow">Entregable 1 · Reportes y exportación</div>
-      <h2>Ventas por categoría</h2>
-      <p class="lead">Consulta con <b>JOIN de 4 tablas</b> (pedidos, detalle_pedido, productos, categorías), <b>GROUP BY</b> y <b>HAVING</b>. El resultado se exporta a CSV, JSON o Excel.</p>
+      <h2>Ventas por sucursal</h2>
+      <p class="lead">Consulta con <b>JOIN de 3 tablas</b> (SUCURSAL, MESA, PEDIDO), <b>GROUP BY</b> y <b>HAVING</b>. El resultado se exporta a CSV, JSON o Excel.</p>
 
       <div class="card">
         <h3>Parámetros <span class="pill">GROUP BY / HAVING</span></h3>
         <div class="grid c3" style="align-items:end">
-          <div class="field"><label>Mostrar categorías con ingresos mayores a (S/)</label><input id="r-min" type="number" value="20"></div>
+          <div class="field"><label>Mostrar sucursales con ventas mayores a (S/)</label><input id="r-min" type="number" value="100"></div>
           <div class="field"><button class="btn primary" id="btn-reporte">Generar reporte</button></div>
         </div>
         <div class="btn-row" style="margin-top:14px">
@@ -149,7 +156,20 @@
         <h3>Resultado</h3>
         <div class="table-wrap">
           <table id="tabla-reporte">
-            <thead><tr><th>Categoría</th><th class="right">N° Pedidos</th><th class="right">Unidades</th><th class="right">Ingresos</th></tr></thead>
+            <thead><tr><th>Sucursal</th><th class="right">N° Pedidos</th><th class="right">Total ventas</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Bonus: productos más vendidos <span class="pill">GROUP BY / HAVING</span></h3>
+        <div class="btn-row" style="margin-bottom:12px">
+          <button class="btn ghost sm" id="btn-rep-prod">Ver productos más vendidos</button>
+        </div>
+        <div class="table-wrap">
+          <table id="tabla-rep-prod">
+            <thead><tr><th>Producto</th><th class="right">Unidades vendidas</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -160,24 +180,36 @@
     <section class="page" id="page-nosql">
       <div class="eyebrow">Entregable 2 · Caso de uso NoSQL / Híbrido</div>
       <h2>Módulo híbrido con JSONB</h2>
-      <p class="lead">Cada plato guarda atributos semi-estructurados (vegano, picante, alérgenos, ingredientes…) en una columna <b>JSONB</b> dentro de la tabla <b>productos</b>. Así no necesitamos decenas de columnas ni tablas extra para datos que varían de plato en plato.</p>
+      <p class="lead">Cada plato guarda atributos semi-estructurados (ingredientes, alérgenos, etiquetas, nivel de picante…) en una columna <b>JSONB</b> llamada <b>datos_extra</b> dentro de la tabla <b>PRODUCTO</b>. Así no necesitamos decenas de columnas ni tablas extra para datos que varían de plato en plato.</p>
 
       <div class="callout">
-        <b>Tabla afectada:</b> <span class="mono">productos</span> · columna <span class="mono">atributos JSONB</span> (con índice GIN).<br>
-        <b>¿Por qué JSONB aquí?</b> Los atributos de cada plato son distintos e impredecibles; en el modelo puramente relacional necesitaríamos muchas columnas vacías o una tabla EAV difícil de consultar. JSONB lo resuelve en un solo campo flexible y consultable.
+        <b>Tabla afectada:</b> <span class="mono">PRODUCTO</span> · columna <span class="mono">datos_extra JSONB</span> (con índice GIN).<br>
+        <b>¿Por qué JSONB aquí?</b> Los atributos de cada plato son distintos e impredecibles; en el modelo puramente relacional necesitaríamos muchas columnas vacías o varias tablas. JSONB lo resuelve en un solo campo flexible y consultable, e indexable con GIN.
       </div>
 
       <div class="card">
-        <h3>Buscar dentro del JSON <span class="pill">@&gt; operador</span></h3>
+        <h3>Buscar dentro del JSON <span class="pill">operador ?</span></h3>
         <div class="grid c3" style="align-items:end">
-          <div class="field"><label>Atributo</label>
-            <select id="nq-clave"><option value="vegano">vegano</option><option value="picante">picante</option><option value="gaseosa">gaseosa</option></select></div>
-          <div class="field"><label>Valor</label><input id="nq-valor" value="true"></div>
-          <div class="field"><button class="btn primary" id="btn-nosql">Buscar</button></div>
+          <div class="field"><label>Buscar por etiqueta</label>
+            <select id="nq-etiqueta">
+              <option value="sin gluten">sin gluten</option>
+              <option value="criollo">criollo</option>
+              <option value="tradicional">tradicional</option>
+              <option value="marino">marino</option>
+              <option value="postre">postre</option>
+              <option value="dulce">dulce</option>
+              <option value="plato principal">plato principal</option>
+            </select></div>
+          <div class="field"><button class="btn primary" id="btn-etiqueta">Buscar por etiqueta</button></div>
         </div>
-        <div class="grid c2" style="margin-top:13px; align-items:end">
+        <div class="grid c3" style="margin-top:13px; align-items:end">
           <div class="field"><label>…o buscar platos con un alérgeno</label>
-            <select id="nq-alerg"><option value="gluten">gluten</option><option value="lacteos">lácteos</option><option value="huevo">huevo</option></select></div>
+            <select id="nq-alerg">
+              <option value="pescado">pescado</option>
+              <option value="leche">leche</option>
+              <option value="gluten">gluten</option>
+              <option value="huevo">huevo</option>
+            </select></div>
           <div class="field"><button class="btn ghost" id="btn-alerg">Buscar por alérgeno</button></div>
         </div>
       </div>
@@ -186,7 +218,7 @@
         <h3>Resultado</h3>
         <div class="table-wrap">
           <table id="tabla-nosql">
-            <thead><tr><th>#</th><th>Plato</th><th class="right">Precio</th><th>Atributos</th></tr></thead>
+            <thead><tr><th>#</th><th>Plato</th><th class="right">Precio</th><th>datos_extra</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
